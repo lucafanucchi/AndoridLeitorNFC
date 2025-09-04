@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="#f5f5f5">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp"
+        tools:context=".MainActivity">
+
+        <!-- Header com boas-vindas -->
+        <TextView
+            android:id="@+id/textViewBemVindo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Olá, Professor!"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="#2E7D32"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Layout de Criação de Aula -->
+        <LinearLayout
+            android:id="@+id/layoutCriacaoAula"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#ffffff"
+            android:padding="24dp"
+            android:visibility="visible">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Nova Aula"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:textColor="#333333"
+                android:layout_marginBottom="24dp" />
+
+            <!-- Seleção de Empresa -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Empresa:"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <Spinner
+                android:id="@+id/spinnerEmpresa"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Descrição da Aula -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Descrição da aula:"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/editTextDescricaoAula"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:hint="Ex: Alongamento para equipe de TI"
+                android:inputType="textCapSentences"
+                android:padding="12dp"
+                android:layout_marginBottom="24dp" />
+
+            <!-- Botão Iniciar -->
+            <Button
+                android:id="@+id/buttonIniciarLeitura"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="Iniciar Leitura de Presença"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+        <!-- Layout de Leitura NFC -->
+        <LinearLayout
+            android:id="@+id/layoutLeitura"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#ffffff"
+            android:padding="24dp"
+            android:gravity="center_horizontal"
+            android:visibility="gone">
+
+            <!-- Info da Aula -->
+            <TextView
+                android:id="@+id/textViewDescricaoAtual"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAlignment="center"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="#2E7D32"
+                android:layout_marginBottom="24dp"
+                android:text="Aula em andamento" />
+
+            <!-- Instrução NFC -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:gravity="center"
+                android:background="#E8F5E8"
+                android:layout_marginBottom="24dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📱"
+                    android:textSize="32sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Aproxime o crachá NFC"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#2E7D32" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="para registrar presença"
+                    android:textSize="16sp"
+                    android:textColor="#666666" />
+
+            </LinearLayout>
+
+            <!-- Contador de Participantes -->
+            <TextView
+                android:id="@+id/textViewContador"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textSize="64sp"
+                android:textStyle="bold"
+                android:textColor="#2E7D32"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="participantes registrados"
+                android:textSize="18sp"
+                android:textColor="#666666"
+                android:layout_marginBottom="24dp" />
+
+            <!-- Lista de IDs -->
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:background="#F8F8F8"
+                android:padding="16dp"
+                android:layout_marginBottom="24dp">
+
+                <TextView
+                    android:id="@+id/textViewListaIds"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="IDs Registrados:\nNenhum participante registrado ainda."
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textColor="#333333" />
+
+            </ScrollView>
+
+            <!-- Botão Finalizar -->
+            <Button
+                android:id="@+id/buttonEncerrarEnviar"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="Encerrar e Enviar Dados"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+            <!-- Botão Abortar Aula -->
+            <Button
+                android:id="@+id/buttonAbortarAula"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="#FF5722"
+                android:text="❌ Abortar Aula"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>
