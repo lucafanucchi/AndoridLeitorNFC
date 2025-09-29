@@ -67,6 +67,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        supportActionBar?.hide()
 
         // ✅ LIMPAR ABSOLUTAMENTE TODOS OS DADOS PERSISTENTES
         limparDadosParciais()

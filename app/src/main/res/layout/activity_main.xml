@@ -13,6 +13,14 @@
         android:padding="24dp"
         tools:context=".MainActivity">
 
+
+        <ImageView
+            android:layout_width="180dp"
+            android:layout_height="60dp"
+            android:src="@drawable/logo_empresa1"
+            android:scaleType="centerInside"
+            android:layout_gravity="center"
+            android:layout_marginBottom="16dp" />
         <!-- Header com boas-vindas -->
         <TextView
             android:id="@+id/textViewBemVindo"
@@ -83,7 +91,9 @@
                 android:layout_height="56dp"
                 android:text="Iniciar Leitura de Presença"
                 android:textSize="18sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:backgroundTint="#172139"
+                android:textColor="#FFFFFF"/>
 
         </LinearLayout>
 
@@ -189,7 +199,9 @@
                 android:layout_height="56dp"
                 android:text="Encerrar e Enviar Dados"
                 android:textSize="18sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:backgroundTint="#172139"
+                android:textColor="#FFFFFF"/>
             <!-- Botão Abortar Aula -->
             <Button
                 android:id="@+id/buttonAbortarAula"

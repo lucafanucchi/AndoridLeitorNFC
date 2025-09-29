@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.digitalsix.leitornfc" // Verifique se o seu namespace está correto
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.digitalsix.leitornfc" // Verifique se o seu applicationId está correto
         minSdk = 23
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
