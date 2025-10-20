@@ -33,32 +33,34 @@
             android:layout_marginBottom="24dp" />
 
         <!-- Layout de Criação de Aula -->
+
+        <!-- Layout de Leitura NFC -->
         <LinearLayout
             android:id="@+id/layoutCriacaoAula"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
             android:background="#ffffff"
+            android:orientation="vertical"
             android:padding="24dp"
             android:visibility="visible">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
                 android:text="Nova Aula"
-                android:textSize="28sp"
-                android:textStyle="bold"
                 android:textColor="#333333"
-                android:layout_marginBottom="24dp" />
+                android:textSize="28sp"
+                android:textStyle="bold" />
 
             <!-- Seleção de Empresa -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
                 android:text="Empresa:"
                 android:textSize="16sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp" />
+                android:textStyle="bold" />
 
             <Spinner
                 android:id="@+id/spinnerEmpresa"
@@ -70,34 +72,33 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
                 android:text="Descrição da aula:"
                 android:textSize="16sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp" />
+                android:textStyle="bold" />
 
             <EditText
                 android:id="@+id/editTextDescricaoAula"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
+                android:layout_marginBottom="24dp"
                 android:hint="Ex: Alongamento para equipe de TI"
                 android:inputType="textCapSentences"
-                android:padding="12dp"
-                android:layout_marginBottom="24dp" />
+                android:padding="12dp" />
 
             <!-- Botão Iniciar -->
             <Button
                 android:id="@+id/buttonIniciarLeitura"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="Iniciar Leitura de Presença"
-                android:textSize="18sp"
-                android:textStyle="bold"
+                android:layout_height="75dp"
                 android:backgroundTint="#172139"
-                android:textColor="#FFFFFF"/>
+                android:text="Iniciar Leitura de Presença"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold" />
 
         </LinearLayout>
 
-        <!-- Layout de Leitura NFC -->
         <LinearLayout
             android:id="@+id/layoutLeitura"
             android:layout_width="match_parent"

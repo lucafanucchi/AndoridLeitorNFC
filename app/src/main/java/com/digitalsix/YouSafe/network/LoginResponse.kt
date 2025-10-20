@@ -1,7 +1,7 @@
-package com.digitalsix.leitornfc.network
+package com.digitalsix.YouSafe.network
 
-import com.digitalsix.leitornfc.model.Professor
-import com.digitalsix.leitornfc.model.EmpresaAtendida
+import com.digitalsix.YouSafe.model.Professor
+import com.digitalsix.YouSafe.model.EmpresaAtendida
 import com.google.gson.annotations.SerializedName
 
 data class LoginResponse(

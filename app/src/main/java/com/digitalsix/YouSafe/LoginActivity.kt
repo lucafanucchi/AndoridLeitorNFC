@@ -1,4 +1,4 @@
-package com.digitalsix.leitornfc
+package com.digitalsix.YouSafe
 
 import android.content.Intent
 import android.os.Bundle
@@ -10,9 +10,9 @@ import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.digitalsix.leitornfc.network.LoginRequest
-import com.digitalsix.leitornfc.network.RetrofitInstance
-import com.digitalsix.leitornfc.utils.SessionManager
+import com.digitalsix.YouSafe.network.LoginRequest
+import com.digitalsix.YouSafe.network.RetrofitInstance
+import com.digitalsix.YouSafe.utils.SessionManager
 import kotlinx.coroutines.launch
 
 class LoginActivity : AppCompatActivity() {

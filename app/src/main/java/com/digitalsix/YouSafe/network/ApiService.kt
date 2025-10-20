@@ -1,4 +1,4 @@
-package com.digitalsix.leitornfc.network
+package com.digitalsix.YouSafe.network
 
 import retrofit2.Response
 import retrofit2.http.*

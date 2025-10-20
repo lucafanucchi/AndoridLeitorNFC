@@ -1,4 +1,4 @@
-package com.digitalsix.leitornfc
+package com.digitalsix.YouSafe
 
 import android.content.Context
 import android.content.Intent
@@ -13,9 +13,9 @@ import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.digitalsix.leitornfc.model.EmpresaAtendida
-import com.digitalsix.leitornfc.network.*
-import com.digitalsix.leitornfc.utils.SessionManager
+import com.digitalsix.YouSafe.model.EmpresaAtendida
+import com.digitalsix.YouSafe.network.*
+import com.digitalsix.YouSafe.utils.SessionManager
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -67,7 +67,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        supportActionBar?.hide()
+        //supportActionBar?.hide()
 
         // ✅ LIMPAR ABSOLUTAMENTE TODOS OS DADOS PERSISTENTES
         limparDadosParciais()

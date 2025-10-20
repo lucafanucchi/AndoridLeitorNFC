@@ -1,4 +1,4 @@
-package com.digitalsix.leitornfc
+package com.digitalsix.YouSafe
 
 import org.junit.Test
 

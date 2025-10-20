@@ -1,4 +1,4 @@
-package com.digitalsix.leitornfc.network
+package com.digitalsix.YouSafe.network
 
 import com.google.gson.annotations.SerializedName
 
@@ -14,4 +14,5 @@ data class RegistrarPresencaResponse(
 
     @SerializedName("total_processados")
     val totalProcessados: Int
+
 )

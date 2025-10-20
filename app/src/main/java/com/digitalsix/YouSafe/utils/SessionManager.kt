@@ -1,9 +1,9 @@
-package com.digitalsix.leitornfc.utils
+package com.digitalsix.YouSafe.utils
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.digitalsix.leitornfc.model.Professor
-import com.digitalsix.leitornfc.model.EmpresaAtendida
+import com.digitalsix.YouSafe.model.Professor
+import com.digitalsix.YouSafe.model.EmpresaAtendida
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 

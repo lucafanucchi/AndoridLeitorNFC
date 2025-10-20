@@ -1,5 +1,5 @@
 // 1. Professor.kt
-package com.digitalsix.leitornfc.model
+package com.digitalsix.YouSafe.model
 
 import com.google.gson.annotations.SerializedName
 
