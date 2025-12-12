@@ -5,10 +5,10 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 object RetrofitInstance {
 
-    // A URL base da sua API
-    private const val BASE_URL = "https://apipresenca.digitalsix.com.br/"
+    // ✅ URL CORRETA DA API YOUSAFE GL V2
+    private const val BASE_URL = "https://apiyousafeglv2.digitalsix.com.br/"
 
-    // Cria uma instância "lazy" do Retrofit. Ele só será criado na primeira vez que for usado.
+    // Cria uma instância "lazy" do Retrofit (só será criado na primeira vez que for usado)
     private val retrofit by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
@@ -16,7 +16,7 @@ object RetrofitInstance {
             .build()
     }
 
-    // Expõe publicamente a nossa ApiService já criada e configurada
+    // Expõe publicamente a ApiService já criada e configurada
     val api: ApiService by lazy {
         retrofit.create(ApiService::class.java)
     }

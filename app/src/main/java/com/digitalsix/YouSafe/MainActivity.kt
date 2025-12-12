@@ -1,475 +1,122 @@
 package com.digitalsix.YouSafe
 
-import android.content.Context
+import android.app.PendingIntent
 import android.content.Intent
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.os.Bundle
 import android.util.Log
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.digitalsix.YouSafe.model.EmpresaAtendida
 import com.digitalsix.YouSafe.network.*
 import com.digitalsix.YouSafe.utils.SessionManager
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import android.view.Menu
+import android.view.MenuItem
+import com.digitalsix.YouSafe.network.RetrofitInstance
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.card.MaterialCardView
 
-class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
+// ==========================================
+// DATA CLASS PARA PARTICIPANTE COM STATUS
+// ==========================================
+data class ParticipanteComStatus(
+    val nfc: String,
+    val funcionarioId: Int?,
+    val nome: String?,
+    val existe: Boolean
+)
 
-    companion object {
-        private const val TAG = "MainActivityNFC"
-        // ✅ CHAVES PARA LIMPAR DADOS PERSISTENTES
-        private const val PREF_PARTIAL_DATA = "partial_aula_data"
-        private const val KEY_PARTIAL_AULA_ID = "partial_aula_id"
-        private const val KEY_PARTIAL_NFC_IDS = "partial_nfc_ids"
-    }
+class MainActivity : AppCompatActivity() {
 
-    // ✅ VARIÁVEIS DE INSTÂNCIA (NÃO ESTÁTICAS) - RESOLVE PROBLEMA DE PERSISTÊNCIA
-    private var nfcAdapter: NfcAdapter? = null
-    private var listaNfcIds = mutableListOf<String>()
-    private var isLeituraAtiva = false
-    private var aulaAtual: AulaInfo? = null
-    private var empresaSelecionada: EmpresaAtendida? = null
-    private var isEnviandoDados = false
-
-    // Session Manager
+    // ==========================================
+    // PROPRIEDADES
+    // ==========================================
     private lateinit var sessionManager: SessionManager
+    private var nfcAdapter: NfcAdapter? = null
 
-    // Views da interface
-    private lateinit var layoutCriacaoAula: LinearLayout
-    private lateinit var layoutLeitura: LinearLayout
+    // Estado 1 - Criação de Aula
+    private lateinit var layoutCriacaoAula: MaterialCardView
+    private lateinit var spinnerEmpresa: AutoCompleteTextView
+    private lateinit var spinnerUnidade: AutoCompleteTextView
+    private lateinit var editTextDescricaoAula: TextInputEditText
+    private lateinit var buttonIniciarAula: Button
     private lateinit var textViewBemVindo: TextView
-    private lateinit var spinnerEmpresa: Spinner
-    private lateinit var editTextDescricaoAula: EditText
-    private lateinit var buttonIniciarLeitura: Button
+
+    private var ultimaLeituraNFC: Long = 0
+    private val DEBOUNCE_DELAY_MS = 1000L
+
+    // Estado 2 - Leitura NFC
+    private lateinit var layoutLeituraNFC: MaterialCardView
+    private lateinit var textViewAulaEmAndamento: TextView
     private lateinit var textViewDescricaoAtual: TextView
+    private lateinit var textViewUnidadeAtual: TextView
     private lateinit var textViewContador: TextView
-    private lateinit var textViewListaIds: TextView
-    private lateinit var buttonEncerrarEnviar: Button
+    private lateinit var textViewListaNFCs: TextView
+    private lateinit var buttonConfirmarAula: Button
     private lateinit var buttonAbortarAula: Button
 
-    // ✅ MÉTODO PARA LIMPAR DADOS PERSISTENTES
-    private fun limparDadosParciais() {
-        val prefs = getSharedPreferences(PREF_PARTIAL_DATA, Context.MODE_PRIVATE)
-        val editor = prefs.edit()
-        editor.clear()
-        editor.commit()
+    // ✅ Controle de Empresas e Unidades
+    private var todasUnidadesDoInstrutor = listOf<EmpresaUnidadeResponse>()
+    private var empresasMap = mapOf<String, EmpresaComUnidades>()  // empresa_nome -> dados
+    private var empresaSelecionadaNome: String? = null
+    private var unidadeIdSelecionada: Int? = null
 
-        Log.d(TAG, "Dados parciais limpos das SharedPreferences")
-    }
+    // Controle de Estado
+    private var aulaEmProgressoId: Int? = null
+    private var descricaoAulaAtual: String = ""
 
+    private val listaParticipantes = mutableListOf<ParticipanteComStatus>()
+
+    // ==========================================
+    // DATA CLASSES AUXILIARES
+    // ==========================================
+    data class EmpresaComUnidades(
+        val empresaNome: String,
+        val empresaId: Int,
+        val unidades: List<UnidadeInfo>
+    )
+
+    data class UnidadeInfo(
+        val unidadeId: Int,
+        val unidadeNome: String
+    )
+
+    // ==========================================
+    // LIFECYCLE
+    // ==========================================
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        //supportActionBar?.hide()
 
-        // ✅ LIMPAR ABSOLUTAMENTE TODOS OS DADOS PERSISTENTES
-        limparDadosParciais()
-
-        // ✅ FORÇAR LIMPEZA TOTAL DE VARIÁVEIS DE INSTÂNCIA
-        listaNfcIds.clear()
-        isLeituraAtiva = false
-        aulaAtual = null
-        empresaSelecionada = null
-
-        // Inicializar Session Manager
         sessionManager = SessionManager(this)
 
-        // Verificar se está logado
         if (!sessionManager.isLoggedIn()) {
             irParaLogin()
             return
         }
 
+        // Configurar Toolbar
+        val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
+
         bindViews()
-        setupNFC()
-        setupInterface()
-        setupClickListeners()
-
-        // ✅ GARANTIR QUE SEMPRE COMECE LIMPO
-        resetarParaEstadoInicial()
-
-        // ✅ LOG PARA DEBUG
-        Log.d(TAG, "=== ONCREATE - ESTADO INICIAL LIMPO ===")
-        Log.d(TAG, "isLeituraAtiva: $isLeituraAtiva")
-        Log.d(TAG, "listaNfcIds size: ${listaNfcIds.size}")
-        Log.d(TAG, "aulaAtual: $aulaAtual")
-        Log.d(TAG, "========================================")
-    }
-
-    private fun bindViews() {
-        layoutCriacaoAula = findViewById(R.id.layoutCriacaoAula)
-        layoutLeitura = findViewById(R.id.layoutLeitura)
-        textViewBemVindo = findViewById(R.id.textViewBemVindo)
-        spinnerEmpresa = findViewById(R.id.spinnerEmpresa)
-        editTextDescricaoAula = findViewById(R.id.editTextDescricaoAula)
-        buttonIniciarLeitura = findViewById(R.id.buttonIniciarLeitura)
-        textViewDescricaoAtual = findViewById(R.id.textViewDescricaoAtual)
-        textViewContador = findViewById(R.id.textViewContador)
-        textViewListaIds = findViewById(R.id.textViewListaIds)
-        buttonEncerrarEnviar = findViewById(R.id.buttonEncerrarEnviar)
-        buttonAbortarAula = findViewById(R.id.buttonAbortarAula)
-    }
-
-    private fun setupNFC() {
-        nfcAdapter = NfcAdapter.getDefaultAdapter(this)
-        if (nfcAdapter == null) {
-            Toast.makeText(this, "Este dispositivo não suporta NFC.", Toast.LENGTH_LONG).show()
-            finish()
-            return
-        }
-    }
-
-    private fun setupInterface() {
-        // Mostrar nome do professor
-        val professor = sessionManager.getProfessor()
-        textViewBemVindo.text = "Olá, ${professor?.nome ?: "Professor"}!"
-
-        // Configurar spinner de empresas
-        val empresas = sessionManager.getEmpresas()
-        val empresasNomes = empresas.map { it.nomeEmpresa }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, empresasNomes)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        spinnerEmpresa.adapter = adapter
-    }
-
-    private fun setupClickListeners() {
-        buttonIniciarLeitura.setOnClickListener {
-            val descricao = editTextDescricaoAula.text.toString().trim()
-            if (descricao.isEmpty()) {
-                Toast.makeText(this, "Por favor, insira uma descrição para a aula.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val empresas = sessionManager.getEmpresas()
-            if (empresas.isEmpty()) {
-                Toast.makeText(this, "Nenhuma empresa disponível.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            empresaSelecionada = empresas[spinnerEmpresa.selectedItemPosition]
-            criarAula(descricao)
-        }
-
-        buttonEncerrarEnviar.setOnClickListener {
-            if (listaNfcIds.isEmpty()) {
-                Toast.makeText(this, "Nenhum participante registrado.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            finalizarAula()
-        }
-
-        buttonAbortarAula.setOnClickListener {
-            mostrarDialogoAbortarAula()
-        }
-    }
-
-    // ✅ MÉTODO CRIAR AULA CORRIGIDO COM LIMPEZA TOTAL
-    private fun criarAula(descricao: String) {
-        // ✅ NÃO CRIAR AULA NO SERVIDOR - APENAS PREPARAR DADOS LOCALMENTE
-
-        val empresas = sessionManager.getEmpresas()
-        if (empresas.isEmpty()) {
-            Toast.makeText(this, "Nenhuma empresa disponível.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        empresaSelecionada = empresas[spinnerEmpresa.selectedItemPosition]
-
-        // ✅ CRIAR OBJETO AULA LOCAL (SEM ID do servidor ainda)
-        aulaAtual = AulaInfo(
-            id = 0, // ID temporário
-            descricao = descricao,
-            dataHoraInicio = obterHorarioAtualSaoPaulo(),
-            empresaAtendidaId = empresaSelecionada!!.id
-        )
-
-        iniciarModoLeitura()
-        Toast.makeText(this, "Preparando aula: $descricao", Toast.LENGTH_SHORT).show()
-    }
-
-    // ✅ MÉTODO INICIAR MODO LEITURA CORRIGIDO
-    private fun iniciarModoLeitura() {
-        // ✅ GARANTIR QUE A LISTA ESTÁ LIMPA AO INICIAR LEITURA
-        listaNfcIds.clear()
-        Log.d(TAG, "Lista limpa ao iniciar modo leitura: ${listaNfcIds.size}")
-
-        isLeituraAtiva = true
-        layoutCriacaoAula.visibility = View.GONE
-        layoutLeitura.visibility = View.VISIBLE
-
-        aulaAtual?.let { aula ->
-            val horaInicio = obterHorarioAtualSaoPaulo()
-            textViewDescricaoAtual.text = "${aula.descricao}\nIniciada às $horaInicio"
-        }
-
-        atualizarContadorELista()
-    }
-
-    // ✅ MeTODO FINALIZAR AULA COM LIMPEZA GARANTIDA
-    private fun finalizarAula() {
-        val token = sessionManager.getTokenWithBearer()
-        val aula = aulaAtual
-
-        if (token == null || aula == null || empresaSelecionada == null) {
-            irParaLogin()
-            return
-        }
-
-        if (listaNfcIds.isEmpty()) {
-            Toast.makeText(this, "Nenhum participante registrado.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        buttonEncerrarEnviar.isEnabled = false
-        buttonEncerrarEnviar.text = "Criando aula e enviando presenças..."
-
-        lifecycleScope.launch {
-            try {
-                // ✅ PASSO 1: CRIAR AULA NO SERVIDOR
-                val criarAulaRequest = CriarAulaRequest(
-                    descricaoAula = aula.descricao,
-                    empresaAtendidaId = empresaSelecionada!!.id
-                )
-
-                val criarAulaResponse = RetrofitInstance.api.criarAula(token, criarAulaRequest)
-
-                if (criarAulaResponse.isSuccessful) {
-                    val aulaResposta = criarAulaResponse.body()
-                    if (aulaResposta != null) {
-                        val aulaIdReal = aulaResposta.aula.id
-
-                        // ✅ PASSO 2: REGISTRAR PRESENÇAS COM O ID REAL DA AULA
-                        val presencaRequest = RegistrarPresencaRequest(listaNfcIds)
-                        val presencaResponse = RetrofitInstance.api.registrarPresencas(
-                            token,
-                            aulaIdReal,
-                            presencaRequest
-                        )
-
-                        if (presencaResponse.isSuccessful) {
-                            val resultado = presencaResponse.body()
-                            if (resultado != null) {
-                                mostrarResultadoFinal(resultado)
-                            }
-                        } else {
-                            throw Exception("Erro ao registrar presenças: ${presencaResponse.code()}")
-                        }
-                    } else {
-                        throw Exception("Resposta inválida ao criar aula")
-                    }
-                } else {
-                    throw Exception("Erro ao criar aula: ${criarAulaResponse.code()}")
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Erro ao finalizar aula", e)
-                Toast.makeText(this@MainActivity, "Erro: ${e.message}", Toast.LENGTH_LONG).show()
-            } finally {
-                buttonEncerrarEnviar.isEnabled = true
-                buttonEncerrarEnviar.text = "Encerrar e Enviar Dados"
-            }
-        }
-    }
-
-
-
-    private fun mostrarResultadoFinal(resultado: RegistrarPresencaResponse) {
-        val builder = AlertDialog.Builder(this)
-        builder.setTitle("Aula Finalizada!")
-
-        val mensagem = StringBuilder()
-        mensagem.append("✅ Presenças registradas: ${resultado.presencasRegistradas}\n")
-        mensagem.append("📊 Total processados: ${resultado.totalProcessados}\n")
-
-        if (resultado.idsNaoEncontrados.isNotEmpty()) {
-            mensagem.append("\n⚠️ IDs não encontrados:\n")
-            resultado.idsNaoEncontrados.forEach {
-                mensagem.append("• $it\n")
-            }
-        }
-
-        builder.setMessage(mensagem.toString())
-        builder.setPositiveButton("OK") { _, _ ->
-            resetarParaEstadoInicial()
-        }
-
-        builder.setCancelable(false)
-        builder.show()
-    }
-
-    private fun mostrarDialogoAbortarAula() {
-        if (!isLeituraAtiva) {
-            Toast.makeText(this, "Nenhuma aula em andamento", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("Abortar Aula")
-            .setMessage("Deseja realmente abortar esta aula? Todos os dados serão perdidos.")
-            .setPositiveButton("Sim, Abortar") { _, _ ->
-                abortarAulaAtual()
-            }
-            .setNegativeButton("Cancelar", null)
-            .show()
-    }
-
-    // ✅ MÉTODO ABORTAR AULA CORRIGIDO
-    private fun abortarAulaAtual() {
-        // ✅ COMO A AULA AINDA NÃO FOI CRIADA NO SERVIDOR, SÓ LIMPAR LOCALMENTE
-
-        Log.d(TAG, "Abortando aula local: ${aulaAtual?.descricao}")
-
-        // Limpar dados locais imediatamente
-        listaNfcIds.clear()
-        isLeituraAtiva = false
-        aulaAtual = null
-        empresaSelecionada = null
-
-        resetarParaEstadoInicial()
-        Toast.makeText(this, "Aula abortada - dados descartados", Toast.LENGTH_SHORT).show()
-    }
-
-
-    // NFC - READER MODE
-    override fun onTagDiscovered(tag: Tag?) {
-        if (!isLeituraAtiva) return
-
-        tag?.let {
-            val tagIdHex = bytesToHexString(it.id)
-            runOnUiThread {
-                if (!listaNfcIds.contains(tagIdHex)) {
-                    listaNfcIds.add(tagIdHex)
-                    atualizarContadorELista()
-                    Toast.makeText(this, "✅ Participante adicionado!", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this, "⚠️ Este participante já foi registrado.", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
+        configurarNFC()
+        carregarEmpresasEUnidades()
+        configurarListeners()
+        verificarAulaEmAndamento()
     }
 
     override fun onResume() {
         super.onResume()
-
-        nfcAdapter?.enableReaderMode(
-            this,
-            this,
-            NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_NFC_B,
-            null
-        )
+        habilitarLeituraNFC()
     }
 
-    // ✅ MÉTODO ONPAUSE PARA CAPTURAR FECHAMENTO DO APP
-    override fun onPause() {
-        super.onPause()
-        nfcAdapter?.disableReaderMode(this)
-
-        // ✅ SE APP FOR PAUSADO DURANTE LEITURA, LIMPAR DADOS PARCIAIS
-        if (isLeituraAtiva) {
-            Log.d(TAG, "App pausado durante leitura - limpando dados parciais")
-            limparDadosParciais()
-        }
-    }
-
-    // ✅ MÉTODO ONDESTROY CORRIGIDO
-    override fun onDestroy() {
-        super.onDestroy()
-
-        // ✅ LIMPAR COMPLETAMENTE AO SAIR
-        limparDadosParciais()
-        listaNfcIds.clear()
-
-        Log.d(TAG, "onDestroy - Activity sendo destruída e dados limpos")
-    }
-
-    // ✅ MeTODO RESETAR CORRIGIDO COM LIMPEZA COMPLETA
-    private fun resetarParaEstadoInicial() {
-        Log.d(TAG, "=== ANTES DO RESET ===")
-        Log.d(TAG, "isLeituraAtiva: $isLeituraAtiva")
-        Log.d(TAG, "listaNfcIds: $listaNfcIds")
-        Log.d(TAG, "aulaAtual: $aulaAtual")
-        Log.d(TAG, "isEnviandoDados: $isEnviandoDados")
-
-        // ✅ LIMPAR DADOS PERSISTENTES
-        limparDadosParciais()
-
-        // ✅ LIMPAR ABSOLUTAMENTE TUDO
-        isLeituraAtiva = false
-        isEnviandoDados = false // ✅ RESETAR CONTROLE DE ENVIO
-        listaNfcIds.clear()
-        listaNfcIds.clear() // ✅ LIMPAR DUAS VEZES PARA GARANTIR
-        aulaAtual = null
-        empresaSelecionada = null
-
-        // Limpar campos da interface
-        editTextDescricaoAula.text.clear()
-
-        // Resetar interface para estado inicial
-        layoutCriacaoAula.visibility = View.VISIBLE
-        layoutLeitura.visibility = View.GONE
-
-        // Resetar botões
-        buttonEncerrarEnviar.isEnabled = true
-        buttonEncerrarEnviar.text = "Encerrar e Enviar Dados"
-        buttonIniciarLeitura.isEnabled = true
-        buttonIniciarLeitura.text = "Iniciar Leitura de Presença"
-
-        // Atualizar displays
-        atualizarContadorELista()
-
-        Log.d(TAG, "=== APÓS O RESET ===")
-        Log.d(TAG, "isLeituraAtiva: $isLeituraAtiva")
-        Log.d(TAG, "listaNfcIds: $listaNfcIds")
-        Log.d(TAG, "aulaAtual: $aulaAtual")
-        Log.d(TAG, "isEnviandoDados: $isEnviandoDados")
-        Log.d(TAG, "====================")
-    }
-
-    private fun atualizarContadorELista() {
-        textViewContador.text = listaNfcIds.size.toString()
-        val builder = StringBuilder("IDs Registrados:\n")
-
-        if (listaNfcIds.isEmpty()) {
-            builder.append("Nenhum participante registrado ainda.")
-        } else {
-            listaNfcIds.forEachIndexed { index, id ->
-                builder.append("${index + 1}. $id\n")
-            }
-        }
-
-        textViewListaIds.text = builder.toString()
-    }
-
-    private fun bytesToHexString(src: ByteArray?): String {
-        return src?.joinToString("") { "%02X".format(it) } ?: ""
-    }
-
-    private fun irParaLogin() {
-        sessionManager.logout()
-        val intent = Intent(this, LoginActivity::class.java)
-        startActivity(intent)
-        finish()
-    }
-
-    private fun obterHorarioAtualSaoPaulo(): String {
-        return try {
-            val timeZoneSP = TimeZone.getTimeZone("America/Sao_Paulo")
-            val calendar = Calendar.getInstance(timeZoneSP)
-            SimpleDateFormat("HH:mm", Locale.getDefault()).format(calendar.time)
-        } catch (e: Exception) {
-            SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-        }
-    }
-
-    // MENU DE OPÇÕES
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.menu_main, menu)
         return true
@@ -478,47 +125,634 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_logout -> {
-                logout()
-                true
-            }
-            R.id.action_info -> {
-                mostrarInfo()
+                fazerLogout()
                 true
             }
             else -> super.onOptionsItemSelected(item)
         }
     }
 
-    private fun logout() {
+    override fun onPause() {
+        super.onPause()
+        desabilitarLeituraNFC()
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        if (NfcAdapter.ACTION_TAG_DISCOVERED == intent?.action) {
+            val tag: Tag? = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
+            tag?.let { processarTagNFC(it) }
+        }
+    }
+
+    // ==========================================
+    // INICIALIZAÇÃO
+    // ==========================================
+    private fun bindViews() {
+        layoutCriacaoAula = findViewById(R.id.layoutCriacaoAula)
+        spinnerEmpresa = findViewById(R.id.spinnerEmpresa)
+        spinnerUnidade = findViewById(R.id.spinnerUnidade)
+        editTextDescricaoAula = findViewById(R.id.editTextDescricaoAula)
+        buttonIniciarAula = findViewById(R.id.buttonIniciarAula)
+        textViewBemVindo = findViewById(R.id.textViewBemVindo)
+
+        layoutLeituraNFC = findViewById(R.id.layoutLeituraNFC)
+        textViewAulaEmAndamento = findViewById(R.id.textViewAulaEmAndamento)
+        textViewDescricaoAtual = findViewById(R.id.textViewDescricaoAtual)
+        textViewUnidadeAtual = findViewById(R.id.textViewUnidadeAtual)
+        textViewContador = findViewById(R.id.textViewContador)
+        textViewListaNFCs = findViewById(R.id.textViewListaNFCs)
+        buttonConfirmarAula = findViewById(R.id.buttonConfirmarAula)
+        buttonAbortarAula = findViewById(R.id.buttonAbortarAula)
+
+        val nomeUsuario = sessionManager.getNomeUsuario()
+        textViewBemVindo.text = "Olá, $nomeUsuario!"
+    }
+
+    private fun fazerLogout() {
         AlertDialog.Builder(this)
             .setTitle("Sair")
             .setMessage("Deseja realmente sair?")
             .setPositiveButton("Sim") { _, _ ->
-                sessionManager.logout()
-                irParaLogin()
+                sessionManager.clearSession()
+                val intent = Intent(this, LoginActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                finish()
             }
             .setNegativeButton("Cancelar", null)
             .show()
     }
 
-    private fun mostrarInfo() {
-        val professor = sessionManager.getProfessor()
-        val empresas = sessionManager.getEmpresas()
+    private fun configurarNFC() {
+        nfcAdapter = NfcAdapter.getDefaultAdapter(this)
 
-        val info = StringBuilder()
-        info.append("👤 Professor: ${professor?.nome}\n")
-        info.append("📧 Email: ${professor?.email}\n")
-        info.append("🏢 Empresa: ${professor?.nomeEmpresa}\n\n")
-        info.append("📋 Empresas Atendidas:\n")
+        if (nfcAdapter == null) {
+            Toast.makeText(this, "❌ Dispositivo não suporta NFC", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
 
-        empresas.forEach {
-            info.append("• ${it.nomeEmpresa}\n")
+        if (nfcAdapter?.isEnabled == false) {
+            Toast.makeText(this, "⚠️ NFC desabilitado. Ative nas configurações.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // ==========================================
+    // ✅ CARREGAR E FILTRAR EMPRESAS/UNIDADES
+    // ==========================================
+    private fun carregarEmpresasEUnidades() {
+        lifecycleScope.launch {
+            try {
+                Log.d("MainActivity", "🔄 Carregando empresas e unidades...")
+
+                // 1. Pegar unidades que o instrutor atende (do login)
+                val usuario = sessionManager.getUsuario()
+                val unidadesAtendidasDoLogin = usuario?.unidadesAtendidas ?: emptyList()
+
+                if (unidadesAtendidasDoLogin.isEmpty()) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "❌ Você não tem unidades atribuídas",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@launch
+                }
+
+                Log.d("MainActivity", "📋 Unidades do login: ${unidadesAtendidasDoLogin.size}")
+                unidadesAtendidasDoLogin.forEach {
+                    Log.d("MainActivity", "  - ${it.nome} (${it.empresa})")
+                }
+
+                // 2. Buscar TODAS as unidades do banco (com empresa_id)
+                val response = RetrofitInstance.api.getEmpresas()
+
+                if (response.isSuccessful) {
+                    val todasUnidadesDoBanco = response.body() ?: emptyList()
+                    Log.d("MainActivity", "🗄️ Unidades do banco: ${todasUnidadesDoBanco.size}")
+
+                    // 3. ✅ FILTRAR: só unidades que o instrutor atende
+                    val unidadeIdsDoInstrutor = unidadesAtendidasDoLogin.map { it.id }.toSet()
+
+                    todasUnidadesDoInstrutor = todasUnidadesDoBanco.filter { unidade ->
+                        unidade.unidadeId in unidadeIdsDoInstrutor
+                    }
+
+                    Log.d("MainActivity", "✅ Unidades filtradas: ${todasUnidadesDoInstrutor.size}")
+
+                    if (todasUnidadesDoInstrutor.isEmpty()) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "❌ Erro ao carregar dados das unidades",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        return@launch
+                    }
+
+                    // 4. Agrupar por empresa
+                    processarEmpresasEUnidades()
+                    configurarSpinnerEmpresas()
+
+                } else {
+                    Log.e("MainActivity", "❌ Erro API: ${response.code()}")
+                    Toast.makeText(
+                        this@MainActivity,
+                        "❌ Erro ao carregar unidades: ${response.code()}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "❌ Exceção: ${e.message}", e)
+                Toast.makeText(
+                    this@MainActivity,
+                    "❌ Erro: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    private fun processarEmpresasEUnidades() {
+        // Agrupar unidades por empresa_nome (empresa pode ter múltiplas unidades)
+        empresasMap = todasUnidadesDoInstrutor
+            .groupBy { it.nomeEmpresa }
+            .mapValues { (empresaNome, unidades) ->
+                EmpresaComUnidades(
+                    empresaNome = empresaNome,
+                    empresaId = unidades.first().empresaId,  // Todas têm o mesmo empresa_id
+                    unidades = unidades.map {
+                        UnidadeInfo(
+                            unidadeId = it.unidadeId,
+                            unidadeNome = it.nomeUnidade
+                        )
+                    }.sortedBy { it.unidadeNome }
+                )
+            }
+
+        Log.d("MainActivity", "📊 Processadas ${empresasMap.size} empresas:")
+        empresasMap.forEach { (nome, dados) ->
+            Log.d("MainActivity", "  🏢 $nome (ID: ${dados.empresaId}): ${dados.unidades.size} unidades")
+            dados.unidades.forEach { unidade ->
+                Log.d("MainActivity", "    🏭 ${unidade.unidadeNome} (ID: ${unidade.unidadeId})")
+            }
+        }
+    }
+
+    private fun configurarSpinnerEmpresas() {
+        val nomesEmpresas = empresasMap.keys.sorted()
+
+        if (nomesEmpresas.isEmpty()) {
+            Toast.makeText(this, "❌ Nenhuma empresa disponível", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Log.d("MainActivity", "🏢 Empresas no spinner: $nomesEmpresas")
+
+        val adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_dropdown_item_1line,
+            nomesEmpresas
+        )
+        spinnerEmpresa.setAdapter(adapter)
+
+        spinnerEmpresa.setOnItemClickListener { parent, view, position, id ->
+            val empresaNome = nomesEmpresas[position]
+            empresaSelecionadaNome = empresaNome
+
+            val empresaData = empresasMap[empresaNome]
+            Log.d("MainActivity", "🏢 Empresa selecionada: $empresaNome (ID: ${empresaData?.empresaId})")
+
+            atualizarSpinnerUnidades(empresaNome)
+        }
+    }
+
+    private fun atualizarSpinnerUnidades(empresaNome: String) {
+        val empresaData = empresasMap[empresaNome]
+
+        if (empresaData == null) {
+            Log.e("MainActivity", "❌ Empresa não encontrada: $empresaNome")
+            spinnerUnidade.isEnabled = false
+            spinnerUnidade.setAdapter(null)
+            return
+        }
+
+        val unidades = empresaData.unidades
+
+        Log.d("MainActivity", "🏭 Unidades da empresa '$empresaNome': ${unidades.size}")
+
+        if (unidades.isEmpty()) {
+            Toast.makeText(this, "⚠️ Nenhuma unidade disponível para esta empresa", Toast.LENGTH_SHORT).show()
+            spinnerUnidade.isEnabled = false
+            spinnerUnidade.setAdapter(null)
+            return
+        }
+
+        // Criar lista de strings para o spinner
+        val nomesUnidades = unidades.map { it.unidadeNome }
+
+        val adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_dropdown_item_1line,
+            nomesUnidades
+        )
+        spinnerUnidade.setAdapter(adapter)
+        spinnerUnidade.isEnabled = true
+
+        spinnerUnidade.setOnItemClickListener { parent, view, position, id ->
+            val unidade = unidades[position]
+            unidadeIdSelecionada = unidade.unidadeId
+
+            Log.d("MainActivity", "🏭 Unidade selecionada: ${unidade.unidadeNome} (ID: ${unidade.unidadeId})")
+        }
+    }
+
+    private fun configurarListeners() {
+        buttonIniciarAula.setOnClickListener { iniciarNovaAula() }
+        buttonConfirmarAula.setOnClickListener { mostrarDialogConfirmacao() }
+        buttonAbortarAula.setOnClickListener { mostrarDialogAbortarAula() }
+    }
+
+    // ==========================================
+    // CRASH RECOVERY
+    // ==========================================
+    private fun verificarAulaEmAndamento() {
+        val aulaId = sessionManager.getAulaEmProgresso()
+
+        if (aulaId != null) {
+            AlertDialog.Builder(this)
+                .setTitle("⚠️ Aula em Andamento")
+                .setMessage("Você tem uma aula que não foi finalizada. Deseja continuar ou abortar?")
+                .setPositiveButton("Continuar") { _, _ ->
+                    aulaEmProgressoId = aulaId
+                    mostrarEstadoLeituraNFC("Aula em andamento", "Recuperada")
+                }
+                .setNegativeButton("Abortar") { _, _ ->
+                    abortarAulaSemParticipantes(aulaId)
+                }
+                .setCancelable(false)
+                .show()
+        }
+    }
+
+    // ==========================================
+    // FLUXO 1: CRIAR AULA
+    // ==========================================
+    private fun iniciarNovaAula() {
+        val descricao = editTextDescricaoAula.text.toString().trim()
+
+        if (descricao.isEmpty()) {
+            Toast.makeText(this, "⚠️ Digite uma descrição para a aula", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (empresaSelecionadaNome == null) {
+            Toast.makeText(this, "⚠️ Selecione uma empresa", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (unidadeIdSelecionada == null) {
+            Toast.makeText(this, "⚠️ Selecione uma unidade", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val empresaData = empresasMap[empresaSelecionadaNome]
+        Log.d("MainActivity", "🎯 Criar aula: Empresa='$empresaSelecionadaNome' (ID: ${empresaData?.empresaId}), Unidade ID=$unidadeIdSelecionada")
+
+        criarAula(descricao, unidadeIdSelecionada!!)
+    }
+
+    private fun criarAula(descricao: String, unidadeId: Int) {
+        val token = sessionManager.getTokenWithBearer() ?: run {
+            irParaLogin()
+            return
+        }
+
+        buttonIniciarAula.isEnabled = false
+        buttonIniciarAula.text = "Criando aula..."
+
+        lifecycleScope.launch {
+            try {
+                val dataAtual = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date())
+
+                val request = CriarAulaRequest(
+                    descricao = descricao,
+                    unidadeId = unidadeId,
+                    data = dataAtual
+                )
+
+                Log.d("MainActivity", "📤 Request: $request")
+
+                val response = RetrofitInstance.api.criarAula(token, request)
+
+                if (response.isSuccessful) {
+                    val aulaResponse = response.body()
+
+                    if (aulaResponse != null) {
+                        aulaEmProgressoId = aulaResponse.aula.aulaId
+                        descricaoAulaAtual = descricao
+
+                        sessionManager.salvarAulaEmProgresso(aulaResponse.aula.aulaId)
+
+                        Toast.makeText(
+                            this@MainActivity,
+                            "✅ ${aulaResponse.message}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        val unidadeNome = todasUnidadesDoInstrutor
+                            .find { it.unidadeId == unidadeId }
+                            ?.nomeUnidade ?: "Unidade"
+
+                        mostrarEstadoLeituraNFC(descricao, unidadeNome)
+                    } else {
+                        mostrarErro("Resposta vazia do servidor")
+                    }
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    Log.e("MainActivity", "❌ Erro response: $errorBody")
+                    mostrarErro(errorBody ?: "Erro ao criar aula")
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "❌ Exception criar aula: ${e.message}", e)
+                mostrarErro("Erro: ${e.message}")
+            } finally {
+                buttonIniciarAula.isEnabled = true
+                buttonIniciarAula.text = "🎯 Iniciar Aula"
+            }
+        }
+    }
+
+    // ==========================================
+    // RESTO DO CÓDIGO (NFC, CONFIRMAR, ABORTAR)
+    // ==========================================
+
+    private fun mostrarEstadoLeituraNFC(descricao: String, unidade: String) {
+        layoutCriacaoAula.visibility = View.GONE
+        layoutLeituraNFC.visibility = View.VISIBLE
+
+        textViewDescricaoAtual.text = descricao
+        textViewUnidadeAtual.text = "Unidade: $unidade"
+        textViewContador.text = "0"
+        textViewListaNFCs.text = "Nenhum crachá lido ainda."
+
+        listaParticipantes.clear()
+    }
+
+    private fun mostrarErro(mensagem: String) {
+        Toast.makeText(this, "❌ $mensagem", Toast.LENGTH_LONG).show()
+        Log.e("MainActivity", mensagem)
+    }
+
+    private fun irParaLogin() {
+        val intent = Intent(this, LoginActivity::class.java)
+        startActivity(intent)
+        finish()
+    }
+
+    private fun habilitarLeituraNFC() {
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, javaClass).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_MUTABLE
+        )
+        nfcAdapter?.enableForegroundDispatch(this, pendingIntent, null, null)
+    }
+
+    private fun desabilitarLeituraNFC() {
+        nfcAdapter?.disableForegroundDispatch(this)
+    }
+
+    private fun processarTagNFC(tag: Tag) {
+        val agora = System.currentTimeMillis()
+        if (agora - ultimaLeituraNFC < DEBOUNCE_DELAY_MS) {
+            Log.d("NFC", "⏭️ Leitura ignorada (debounce)")
+            return
+        }
+        ultimaLeituraNFC = agora
+
+        val nfcId = tag.id.joinToString("") { "%02X".format(it) }
+        Log.d("NFC", "📱 NFC lido: $nfcId")
+
+        if (listaParticipantes.any { it.nfc == nfcId }) {
+            Log.w("NFC", "⚠️ NFC duplicado: $nfcId")
+            Toast.makeText(this, "⚠️ Crachá já registrado!", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        buscarFuncionarioPorNFC(nfcId)
+    }
+
+    private fun buscarFuncionarioPorNFC(nfc: String) {
+        if (unidadeIdSelecionada == null) {
+            Log.e("NFC", "❌ unidadeIdSelecionada é null")
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                val request = GetFuncionarioByNFCRequest(
+                    nfc = nfc,
+                    unidade_id = unidadeIdSelecionada!!
+                )
+
+                val response = RetrofitInstance.api.getFuncionarioByNFC(request)
+
+                if (response.isSuccessful) {
+                    val funcionario = response.body()
+
+                    if (funcionario != null) {
+                        val existe = funcionario.funcionario_id != null
+                        val nome = funcionario.nome ?: "Desconhecido"
+
+                        val participante = ParticipanteComStatus(
+                            nfc = nfc,
+                            funcionarioId = funcionario.funcionario_id,
+                            nome = nome,
+                            existe = existe
+                        )
+
+                        listaParticipantes.add(participante)
+                        atualizarUI()
+
+                        val mensagem = if (existe) {
+                            "✅ $nome"
+                        } else {
+                            "⚠️ Crachá não cadastrado"
+                        }
+
+                        Toast.makeText(this@MainActivity, mensagem, Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Log.e("NFC", "❌ Erro response: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                Log.e("NFC", "❌ Exceção: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun atualizarUI() {
+        textViewContador.text = listaParticipantes.size.toString()
+
+        val listaTexto = if (listaParticipantes.isEmpty()) {
+            "Nenhum crachá lido ainda."
+        } else {
+            listaParticipantes.joinToString("\n") { p ->
+                val status = if (p.existe) "✅" else "⚠️"
+                "$status ${p.nome ?: "Desconhecido"} (${p.nfc})"
+            }
+        }
+
+        textViewListaNFCs.text = listaTexto
+    }
+
+    private fun mostrarDialogConfirmacao() {
+        if (listaParticipantes.isEmpty()) {
+            Toast.makeText(this, "⚠️ Nenhum participante registrado!", Toast.LENGTH_SHORT).show()
+            return
         }
 
         AlertDialog.Builder(this)
-            .setTitle("Informações da Conta")
-            .setMessage(info.toString())
-            .setPositiveButton("OK", null)
+            .setTitle("✅ Confirmar Aula")
+            .setMessage("Confirmar aula com ${listaParticipantes.size} participante(s)?")
+            .setPositiveButton("Sim") { _, _ -> confirmarAula() }
+            .setNegativeButton("Cancelar", null)
             .show()
+    }
+
+    private fun confirmarAula() {
+        val aulaId = aulaEmProgressoId ?: return
+        val token = sessionManager.getTokenWithBearer() ?: run {
+            irParaLogin()
+            return
+        }
+
+        buttonConfirmarAula.isEnabled = false
+        buttonConfirmarAula.text = "Confirmando..."
+
+        lifecycleScope.launch {
+            try {
+                val participantes = listaParticipantes.map { p ->
+                    ParticipanteAula(
+                        nfc = p.nfc,
+                        unidadeId = unidadeIdSelecionada!!,
+                        funcionarioId = p.funcionarioId,
+                        nome = p.nome
+                    )
+                }
+
+                val request = ConfirmarAulaRequest(participantes = participantes)
+                val response = RetrofitInstance.api.confirmarAula(token, aulaId, request)
+
+                if (response.isSuccessful) {
+                    sessionManager.limparAulaEmProgresso()
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "✅ Aula confirmada com sucesso!",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    voltarParaEstadoInicial()
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    mostrarErro(errorBody ?: "Erro ao confirmar aula")
+                }
+            } catch (e: Exception) {
+                mostrarErro("Erro: ${e.message}")
+            } finally {
+                buttonConfirmarAula.isEnabled = true
+                buttonConfirmarAula.text = "✅ Confirmar Aula"
+            }
+        }
+    }
+
+    private fun mostrarDialogAbortarAula() {
+        AlertDialog.Builder(this)
+            .setTitle("❌ Abortar Aula")
+            .setMessage("Tem certeza que deseja abortar esta aula?")
+            .setPositiveButton("Sim") { _, _ -> abortarAula() }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun abortarAula() {
+        val aulaId = aulaEmProgressoId ?: return
+        val token = sessionManager.getTokenWithBearer() ?: run {
+            irParaLogin()
+            return
+        }
+
+        buttonAbortarAula.isEnabled = false
+        buttonAbortarAula.text = "Abortando..."
+
+        lifecycleScope.launch {
+            try {
+                val request = AbortarAulaRequest(participantes = null)
+                val response = RetrofitInstance.api.abortarAula(token, aulaId, request)
+
+                if (response.isSuccessful) {
+                    sessionManager.limparAulaEmProgresso()
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "✅ Aula abortada",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                    voltarParaEstadoInicial()
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    mostrarErro(errorBody ?: "Erro ao abortar aula")
+                }
+            } catch (e: Exception) {
+                mostrarErro("Erro: ${e.message}")
+            } finally {
+                buttonAbortarAula.isEnabled = true
+                buttonAbortarAula.text = "❌ Abortar Aula"
+            }
+        }
+    }
+
+    private fun abortarAulaSemParticipantes(aulaId: Int) {
+        val token = sessionManager.getTokenWithBearer() ?: run {
+            irParaLogin()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                val request = AbortarAulaRequest(participantes = null)
+                val response = RetrofitInstance.api.abortarAula(token, aulaId, request)
+
+                if (response.isSuccessful) {
+                    sessionManager.limparAulaEmProgresso()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "✅ Aula abortada",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Erro ao abortar aula: ${e.message}")
+            }
+        }
+    }
+
+    private fun voltarParaEstadoInicial() {
+        layoutLeituraNFC.visibility = View.GONE
+        layoutCriacaoAula.visibility = View.VISIBLE
+
+        aulaEmProgressoId = null
+        unidadeIdSelecionada = null
+        empresaSelecionadaNome = null
+        descricaoAulaAtual = ""
+        listaParticipantes.clear()
+
+        editTextDescricaoAula.text?.clear()
+
+        spinnerEmpresa.setText("", false)
+        spinnerUnidade.isEnabled = false
+        spinnerUnidade.setText("", false)
     }
 }

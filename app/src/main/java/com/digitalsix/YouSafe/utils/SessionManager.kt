@@ -2,102 +2,154 @@ package com.digitalsix.YouSafe.utils
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.digitalsix.YouSafe.model.Professor
-import com.digitalsix.YouSafe.model.EmpresaAtendida
+import com.digitalsix.YouSafe.network.Usuario
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 
+/**
+ * Gerenciador de sessão do usuário
+ * Armazena token JWT e dados do usuário logado
+ */
 class SessionManager(context: Context) {
 
-    companion object {
-        private const val PREF_NAME = "professor_session"
-        private const val KEY_TOKEN = "auth_token"
-        private const val KEY_PROFESSOR = "professor_data"
-        private const val KEY_EMPRESAS = "empresas_atendidas"
-        private const val KEY_IS_LOGGED_IN = "is_logged_in"
-    }
-
-    private val preferences: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
 
-    fun salvarLogin(token: String, professor: Professor, empresas: List<EmpresaAtendida>) {
-        // ✅ LIMPAR TUDO ANTES DE SALVAR NOVO LOGIN
-        preferences.edit().clear().commit()
+    companion object {
+        private const val PREF_NAME = "yousafe_session"
+        private const val KEY_TOKEN = "token"
+        private const val KEY_USUARIO = "usuario"
+        private const val KEY_LOGGED_IN = "is_logged_in"
+        private const val KEY_AULA_EM_PROGRESSO = "aula_em_progresso"
+    }
 
-        val editor = preferences.edit()
+    /**
+     * Salvar sessão após login bem-sucedido
+     */
+    fun saveSession(token: String, usuario: Usuario) {
+        val editor = prefs.edit()
         editor.putString(KEY_TOKEN, token)
-        editor.putString(KEY_PROFESSOR, gson.toJson(professor))
-        editor.putString(KEY_EMPRESAS, gson.toJson(empresas))
-        editor.putBoolean(KEY_IS_LOGGED_IN, true)
-        editor.commit() // ✅ COMMIT IMEDIATO
-    }
-    // ✅ ADICIONAR ESTE MÉTODO NO SESSIONMANAGER
-    fun limparCacheCompleto() {
-        val editor = preferences.edit()
-
-        // Manter apenas dados de login, limpar todo o resto
-        val token = getToken()
-        val professor = getProfessor()
-        val empresas = getEmpresas()
-        val isLoggedIn = isLoggedIn()
-
-        // ✅ LIMPAR ABSOLUTAMENTE TUDO
-        editor.clear()
-
-        // ✅ RESTAURAR APENAS DADOS DE LOGIN
-        if (isLoggedIn && token != null && professor != null) {
-            editor.putString(KEY_TOKEN, token)
-            editor.putString(KEY_PROFESSOR, gson.toJson(professor))
-            editor.putString(KEY_EMPRESAS, gson.toJson(empresas))
-            editor.putBoolean(KEY_IS_LOGGED_IN, true)
-        }
-
-        editor.commit() // ✅ COMMIT IMEDIATO
+        editor.putString(KEY_USUARIO, gson.toJson(usuario))
+        editor.putBoolean(KEY_LOGGED_IN, true)
+        editor.apply()
     }
 
+    /**
+     * Verificar se está logado
+     */
+    fun isLoggedIn(): Boolean {
+        return prefs.getBoolean(KEY_LOGGED_IN, false)
+    }
+
+    /**
+     * Obter token JWT
+     */
     fun getToken(): String? {
-        return preferences.getString(KEY_TOKEN, null)
+        return prefs.getString(KEY_TOKEN, null)
     }
 
+    /**
+     * Obter token JWT com prefixo Bearer
+     * Usado para requisições autenticadas
+     */
     fun getTokenWithBearer(): String? {
         val token = getToken()
         return if (token != null) "Bearer $token" else null
     }
 
-    fun getProfessor(): Professor? {
-        val professorJson = preferences.getString(KEY_PROFESSOR, null)
-        return if (professorJson != null) {
-            gson.fromJson(professorJson, Professor::class.java)
-        } else null
+    /**
+     * Obter usuário logado
+     */
+    fun getUsuario(): Usuario? {
+        val usuarioJson = prefs.getString(KEY_USUARIO, null) ?: return null
+        return try {
+            gson.fromJson(usuarioJson, Usuario::class.java)
+        } catch (e: Exception) {
+            null
+        }
     }
 
-    fun getEmpresas(): List<EmpresaAtendida> {
-        val empresasJson = preferences.getString(KEY_EMPRESAS, null)
-        return if (empresasJson != null) {
-            val type = object : TypeToken<List<EmpresaAtendida>>() {}.type
-            gson.fromJson(empresasJson, type)
-        } else emptyList()
+    /**
+     * Atualizar dados do usuário (para refresh de unidades atendidas)
+     */
+    fun atualizarUsuario(usuario: Usuario) {
+        val editor = prefs.edit()
+        editor.putString(KEY_USUARIO, gson.toJson(usuario))
+        editor.apply()
     }
 
-    fun isLoggedIn(): Boolean {
-        return preferences.getBoolean(KEY_IS_LOGGED_IN, false)
+    /**
+     * Atualizar flag de primeiro acesso
+     * Chamado após usuário redefinir senha
+     */
+    fun atualizarPrimeiroAcesso(primeiroAcesso: Boolean) {
+        val usuario = getUsuario() ?: return
+        val usuarioAtualizado = usuario.copy(primeiroAcesso = primeiroAcesso)
+
+        val editor = prefs.edit()
+        editor.putString(KEY_USUARIO, gson.toJson(usuarioAtualizado))
+        editor.apply()
     }
 
-    fun logout() {
-        preferences.edit().clear().commit() // ✅ COMMIT IMEDIATO
+    /**
+     * Limpar sessão (logout)
+     */
+    fun clearSession() {
+        val editor = prefs.edit()
+        editor.clear()
+        editor.apply()
     }
 
-    fun getNomeProfessor(): String {
-        return getProfessor()?.nome ?: "Professor"
+    /**
+     * Obter nome do usuário
+     */
+    fun getNomeUsuario(): String {
+        return getUsuario()?.nome ?: "Usuário"
     }
 
-    fun getEmailProfessor(): String {
-        return getProfessor()?.email ?: ""
+    /**
+     * Obter email do usuário
+     */
+    fun getEmailUsuario(): String {
+        return getUsuario()?.email ?: ""
     }
 
-    // ✅ MÉTODO ULTRA SIMPLES - SÓ MANTÉM LOGIN
-    fun limparTodosOsEstados() {
-        // Não fazer nada - deixar apenas os dados de login
-        // O problema não é aqui
+    // ==========================================
+    // CRASH RECOVERY - GERENCIAMENTO DE AULA EM PROGRESSO
+    // ==========================================
+
+    /**
+     * Salvar ID da aula em progresso
+     * Chamado quando instrutor inicia uma aula
+     */
+    fun salvarAulaEmProgresso(aulaId: Int) {
+        val editor = prefs.edit()
+        editor.putInt(KEY_AULA_EM_PROGRESSO, aulaId)
+        editor.apply()
+    }
+
+    /**
+     * Obter ID da aula em progresso (se existir)
+     * Retorna null se não houver aula em progresso
+     */
+    fun getAulaEmProgresso(): Int? {
+        val aulaId = prefs.getInt(KEY_AULA_EM_PROGRESSO, -1)
+        return if (aulaId == -1) null else aulaId
+    }
+
+    /**
+     * Limpar aula em progresso
+     * Chamado quando aula é confirmada ou abortada
+     */
+    fun limparAulaEmProgresso() {
+        val editor = prefs.edit()
+        editor.remove(KEY_AULA_EM_PROGRESSO)
+        editor.apply()
+    }
+
+    /**
+     * Verificar se existe aula em progresso
+     */
+    fun temAulaEmProgresso(): Boolean {
+        return getAulaEmProgresso() != null
     }
 }

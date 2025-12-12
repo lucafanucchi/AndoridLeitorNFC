@@ -1,5 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Tema Principal (Material Design 3) -->
+    <style name="AppTheme" parent="Theme.Material3.Light.NoActionBar">
+        <!-- Cores Primárias do Logo YouSafe -->
+        <item name="colorPrimary">@color/turquoise</item>
+        <item name="colorOnPrimary">@color/white</item>
 
-    <style name="Theme.LeitorNFC" parent="Theme.AppCompat.DayNight.NoActionBar" />
+        <!-- Cores Secundárias -->
+        <item name="colorSecondary">@color/blue</item>
+        <item name="colorOnSecondary">@color/white</item>
+
+        <!-- Background -->
+        <item name="android:colorBackground">@color/background</item>
+        <item name="colorSurface">@color/white</item>
+
+        <!-- Formas arredondadas -->
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.App.SmallComponent</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.App.MediumComponent</item>
+    </style>
+
+    <!-- Botões arredondados -->
+    <style name="ShapeAppearance.App.SmallComponent" parent="ShapeAppearance.Material3.SmallComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">12dp</item>
+    </style>
+
+    <style name="ShapeAppearance.App.MediumComponent" parent="ShapeAppearance.Material3.MediumComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">16dp</item>
+    </style>
 </resources>
